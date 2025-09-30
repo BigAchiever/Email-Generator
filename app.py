@@ -7,8 +7,7 @@ import json
 import re
 from datetime import datetime
 
-# Utility functions
-# -----------------------------
+# -----------------------------Utility functions-----------------------------
 def clean_json_response(response, original_prompt=""):
     try:
         if original_prompt and original_prompt.strip() in response:
@@ -65,7 +64,7 @@ def build_prompt(prospect, email_type="CSR", previous_email=None):
         ROLE: You are an expert cold email copywriter specializing in polite, persuasive **follow-up communication**.
 
         TASK:
-        Write a **follow-up cold email (<150 words)** for the prospect. 
+        Write a **follow-up cold email (<150 words)** for the prospect.
         Your job is to re-engage them by referencing the **previous email**, building on its key points, and nudging them toward a short conversation.
 
         YOUR ORGANIZATION:
@@ -156,17 +155,14 @@ def generate_email(prospect_data, tokenizer, model, email_type="POSH", previous_
             formatted_prompt = prompt
 
         inputs = tokenizer(
-                formatted_prompt,
-                return_tensors="pt",
-                truncation=True,
-                max_length=1024,   # reduce input size
-                padding=True
+            formatted_prompt, return_tensors="pt",
+            truncation=True, max_length=2048, padding=True
         ).to(device)
 
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
-                max_new_tokens=150,
+                max_new_tokens=500,
                 min_new_tokens=50,
                 do_sample=True,
                 temperature=0.7,
@@ -189,30 +185,27 @@ def generate_email(prospect_data, tokenizer, model, email_type="POSH", previous_
             "signature": "[Your Name]\n[Your Organization]"
         }
 
-# -----------------------------
-# 2️⃣ Load model & adapter
-# -----------------------------
+# ---------------------------------------------------Loading model & adapter -----------------------------------------------------------
+# 
 @st.cache_resource(show_spinner=True)
 def load_model(base_model_path, adapter_path):
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    
+
     tokenizer = AutoTokenizer.from_pretrained(base_model_path)
-    
+
     base_model = AutoModelForCausalLM.from_pretrained(
         base_model_path,
-        device_map="auto",           # Auto assigns layers to GPU/CPU
-        torch_dtype=torch.float16,   # Halves memory usage
-        low_cpu_mem_usage=True,
-        offload_folder="offload"     # offload layers to CPU if GPU memory is low
+        device_map="auto" if device == "cuda" else None,
+        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+        low_cpu_mem_usage=True
     )
-    
+
     model = PeftModel.from_pretrained(base_model, adapter_path)
     model.eval()
-    
+
     return tokenizer, model, device
 
-# -----------------------------
-# 3️⃣ Minimal CSS Styling
+#  CSS 
 # -----------------------------
 def load_css():
     st.markdown("""
@@ -308,7 +301,7 @@ def load_css():
         color: #212529 !important;
         border-color: #adb5bd !important;
     }
-    
+
     /* Primary button style */
     .stButton:has(button[kind="primary"]) > button {
         background-color: #2c3e50; /* Deep slate blue */
@@ -329,8 +322,7 @@ def load_css():
     """, unsafe_allow_html=True)
 
 
-# -----------------------------
-# 4️⃣ Streamlit App
+# Streamlit App
 # -----------------------------
 st.set_page_config(
     page_title="Email Generator",
@@ -340,19 +332,19 @@ st.set_page_config(
 
 load_css()
 
-# Initialize session state
+# session state
 if 'email_history' not in st.session_state:
     st.session_state.email_history = []
 if 'current_email' not in st.session_state:
     st.session_state.current_email = None
 
-# Header
+# Header 
 st.title("📧 AI Email Generator")
 st.caption("Create personalized outreach emails for compliance campaigns")
 
-# Model loading
-base_model_path = "base_model/"  
-adapter_path = "fine_tuned_adapter/"
+#  -----------------------------------------------------------------Model loading--------------------------------------------------------------------
+base_model_path = "PATH TO YOUR BASE MODEL"
+adapter_path = "PATH TO YOUR ADAPTER"
 
 with st.spinner("Loading AI model..."):
     tokenizer, model, device = load_model(base_model_path, adapter_path)
@@ -361,21 +353,21 @@ with st.spinner("Loading AI model..."):
 with st.sidebar:
     st.subheader("Settings")
     email_type = st.selectbox("Campaign Type", ["POSH", "CSR"])
-    
+
     st.divider()
-    
+
     st.metric("Emails Generated", len(st.session_state.email_history))
-    
+
     if st.button("Clear History", type="secondary", use_container_width=True):
         st.session_state.email_history = []
         st.rerun()
 
-# Main tabs
+#  ----------------------------------------------------------Streamlit tabs-----------------------------------------------------------------
 tab1, tab2 = st.tabs(["📝 Create", "📜 History"])
 
 with tab1:
     st.subheader("Prospect Details")
-    
+
     col1, col2 = st.columns(2)
     with col1:
         prospect_name = st.text_input("Name", placeholder="John Smith")
@@ -383,12 +375,12 @@ with tab1:
     with col2:
         company = st.text_input("Company", placeholder="TechCorp Inc.")
         industry = st.text_input("Industry", placeholder="Technology")
-    
+
     linkedin = st.text_input("LinkedIn URL (optional)", placeholder="https://linkedin.com/in/...")
     linkedin_summary = st.text_area("LinkedIn Summary", placeholder="Professional bio or about section...", height=120)
-    
+
     st.divider()
-    
+
     st.subheader("Company Information")
     col3, col4 = st.columns(2)
     with col3:
@@ -397,27 +389,27 @@ with tab1:
     with col4:
         pain_points = st.text_area("Pain Points", height=120)
         case_studies = st.text_area("Case Studies", height=120)
-    
+
     industry_insights = st.text_area("Industry Insights", height=100)
     industry_usecase = st.text_area("Industry Use Case", height=100)
-    
+
     st.divider()
-    
+
     is_followup = st.checkbox("This is a follow-up email")
     previous_email = None
     if is_followup:
         st.markdown('<div class="info-msg">Include the previous email for context</div>', unsafe_allow_html=True)
         previous_email = st.text_area("Previous Email", height=120)
-    
+
     # Validation
     required_fields = [prospect_name, title, company, industry]
     all_filled = all(field.strip() for field in required_fields)
-    
+
     if not all_filled:
         st.markdown('<div class="warning-msg">⚠️ Please fill all required fields</div>', unsafe_allow_html=True)
-    
+
     st.divider()
-    
+
     if st.button("Generate Email", type="primary", disabled=not all_filled, use_container_width=True):
         prospect_data = {
             "prospect_name": prospect_name,
@@ -433,17 +425,17 @@ with tab1:
             "pain_points": pain_points,
             "industry_usecase": industry_usecase
         }
-        
+
         with st.spinner("Generating email... (~15 seconds)"):
             email_output = generate_email(
-                prospect_data, 
-                tokenizer, 
-                model, 
-                email_type=email_type, 
+                prospect_data,
+                tokenizer,
+                model,
+                email_type=email_type,
                 previous_email=previous_email if is_followup else None,
                 device=device
             )
-            
+
             st.session_state.current_email = email_output
             st.session_state.email_history.append({
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -453,17 +445,17 @@ with tab1:
                 "is_followup": is_followup,
                 "email": email_output
             })
-        
+
         st.success("✅ Email generated!")
         st.rerun()
-    
+
     # Display generated email
     if st.session_state.current_email:
         st.divider()
         st.subheader("Generated Email")
-        
+
         email = st.session_state.current_email
-        
+
         st.markdown(f"""
         <div class="email-preview">
             <div class="email-subject">Subject: {email['subject']}</div>
@@ -471,7 +463,7 @@ with tab1:
             <div class="email-signature">{email.get('signature', '[Your Name]<br>[Your Organization]')}</div>
         </div>
         """, unsafe_allow_html=True)
-        
+
         col_a1, col_a2, col_a3 = st.columns(3)
         with col_a1:
             email_text = f"Subject: {email['subject']}\n\n{email['body']}\n\n{email.get('signature', '[Your Name], [Your Organization]')}"
@@ -491,11 +483,11 @@ with tab1:
 
 with tab2:
     st.subheader("Email History")
-    
+
     if st.session_state.email_history:
         for idx, entry in enumerate(reversed(st.session_state.email_history)):
             with st.expander(
-                f"{entry['prospect']} @ {entry['company']} - {entry['timestamp']}", 
+                f"{entry['prospect']} @ {entry['company']} - {entry['timestamp']}",
                 expanded=(idx==0)
             ):
                 st.caption(f"{entry['email_type']} • {'Follow-up' if entry['is_followup'] else 'Initial'}")
